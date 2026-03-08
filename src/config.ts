@@ -8,7 +8,7 @@ const envSchema = z.object({
     TELEGRAM_ALLOWED_USER_IDS: z.string().min(1, "Se requieren los IDs permitidos de usuario de Telegram"),
     GROQ_API_KEY: z.string().min(1, "Groq API key es obligatoria"),
     ZAI_API_KEY: z.string().optional(),
-    ZAI_MODEL: z.string().default('glm-4-plus'),
+    ZAI_MODEL: z.string().default('glm-4-flash'),
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_MODEL: z.string().default('openrouter/free'),
     OPENROUTER_CODING_MODEL: z.string().default('anthropic/claude-4.6-opus'),
