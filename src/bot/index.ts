@@ -33,18 +33,35 @@ export const setupBot = () => {
         }
     });
 
-    // Función auxiliar para enviar texto y audio opcional
+    // Función auxiliar para enviar texto, audio opcional, y archivos
     const sendResponseWithAudio = async (ctx: any, agentResponse: string) => {
         // Verificar si el modelo decidió enviar un audio
         const shouldSendAudio = agentResponse.includes('<VOICE>');
 
-        // Limpiar la etiqueta para que no se vea en el texto final
-        const cleanResponse = agentResponse.replace(/<VOICE>/g, '').trim();
+        // Extraer archivos si usó la etiqueta <FILE:ruta>
+        const fileRegex = /<FILE:(.*?)>/g;
+        const filesToSend: string[] = [];
+        let cleanResponse = agentResponse.replace(fileRegex, (match, filePath) => {
+            filesToSend.push(filePath.trim());
+            return ''; // Remover la etiqueta del texto
+        });
+
+        // Limpiar la etiqueta de voz
+        cleanResponse = cleanResponse.replace(/<VOICE>/g, '').trim();
 
         if (cleanResponse.length > 4000) {
             await ctx.reply(cleanResponse.substring(0, 4000) + '... [truncado]');
         } else if (cleanResponse.length > 0) {
             await ctx.reply(cleanResponse);
+        }
+
+        // Enviar archivos extraidos
+        for (const filePath of filesToSend) {
+            if (fs.existsSync(filePath)) {
+                await ctx.replyWithDocument(new InputFile(filePath));
+            } else {
+                console.warn(`[Bot] Archivo no encontrado para enviar: ${filePath}`);
+            }
         }
 
         // Generar y enviar audio solo si lo solicitó

@@ -1,4 +1,5 @@
 import { saveMemory, deleteMemory } from '../memory/index.js';
+import { buildSingleFileAppTool } from './builder.js';
 import {
     gogGmailSearchTool,
     gogGmailSendTool,
@@ -97,6 +98,7 @@ const toolsRegistry: Record<string, AgentTool> = {
     gog_calendar_events: gogCalendarListTool,
     gog_calendar_create: gogCalendarCreateTool,
     gog_drive_search: gogDriveSearchTool,
+    build_single_file_app: buildSingleFileAppTool,
 };
 
 
