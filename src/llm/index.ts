@@ -41,36 +41,66 @@ export const chatCompletion = async (
             });
             choice = response.choices[0];
         } catch (groqError: any) {
-            console.warn(`⚠️ Groq falló (${groqError.message}). Intentando fallback con OpenRouter...`);
+            console.warn(`⚠️ Groq falló (${groqError.message}). Evaluando fallbacks (Z.ai / OpenRouter)...`);
 
-            if (!config.OPENROUTER_API_KEY) {
-                throw new Error("Groq falló y no hay OPENROUTER_API_KEY configurada.");
+            if (config.ZAI_API_KEY) {
+                console.log(`[LLM] Usando Z.ai (modelo: ${config.ZAI_MODEL})...`);
+                const zaiRes = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${config.ZAI_API_KEY}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        model: config.ZAI_MODEL,
+                        messages: fullMessages,
+                        tools: tools.length > 0 ? tools : undefined,
+                        max_tokens: 4096,
+                        temperature: 0.5,
+                    })
+                });
+
+                if (zaiRes.ok) {
+                    const zaiData = await zaiRes.json();
+                    choice = zaiData.choices[0];
+                } else {
+                    const errorText = await zaiRes.text();
+                    console.warn(`[LLM] Z.ai falló (${zaiRes.status}): ${errorText}. Pasando a OpenRouter...`);
+                }
             }
 
-            const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
-                    "X-Title": "GravityClaw"
-                },
-                body: JSON.stringify({
-                    model: config.OPENROUTER_MODEL,
-                    messages: fullMessages,
-                    tools: tools.length > 0 ? tools : undefined,
-                    max_tokens: 4096,
-                    temperature: 0.5,
-                })
-            });
+            // Si choice sigue indefinido, intentamos con OpenRouter
+            if (!choice) {
+                console.log(`[LLM] Usando OpenRouter (modelo: ${config.OPENROUTER_MODEL})...`);
+                if (!config.OPENROUTER_API_KEY) {
+                    throw new Error("Groq falló, Z.ai no disponible/falló, y no hay OPENROUTER_API_KEY configurada.");
+                }
 
-            if (!openRouterRes.ok) {
-                const errorText = await openRouterRes.text();
-                throw new Error(`Fallback OpenRouter falló: ${errorText}`);
+                const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
+                        "X-Title": "GravityClaw"
+                    },
+                    body: JSON.stringify({
+                        model: config.OPENROUTER_MODEL,
+                        messages: fullMessages,
+                        tools: tools.length > 0 ? tools : undefined,
+                        max_tokens: 4096,
+                        temperature: 0.5,
+                    })
+                });
+
+                if (!openRouterRes.ok) {
+                    const errorText = await openRouterRes.text();
+                    throw new Error(`Fallback final (OpenRouter) falló: ${errorText}`);
+                }
+
+                const openRouterData = await openRouterRes.json();
+                choice = openRouterData.choices[0];
             }
-
-            const openRouterData = await openRouterRes.json();
-            choice = openRouterData.choices[0];
         }
 
         return {
