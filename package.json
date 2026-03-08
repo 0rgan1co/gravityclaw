@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prestart": "tsx scripts/setupGog.ts",
     "start": "tsx src/index.ts"
   },
   "keywords": [],

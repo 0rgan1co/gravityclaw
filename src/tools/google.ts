@@ -6,7 +6,15 @@ const execAsync = promisify(exec);
 
 async function runGogCommand(command: string): Promise<string> {
     try {
-        const { stdout, stderr } = await execAsync(command);
+        // En Railway usaremos un binario descargado localmente si no existe de forma global
+        const binPath = `${process.cwd()}/bin`;
+        const env = {
+            ...process.env,
+            PATH: `${binPath}:${process.env.PATH || ''}`,
+            GOG_KEYRING_PASSPHRASE: 'gravity'
+        };
+
+        const { stdout, stderr } = await execAsync(command, { env });
         if (stderr && !stdout) {
             return `Warning/Error: ${stderr}`;
         }
