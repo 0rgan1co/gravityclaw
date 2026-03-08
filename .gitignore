@@ -71,3 +71,5 @@ node_modules/
 # Private and local Database Files
 service-account.json
 memory.db
+client_secret_*.json
+credentials.json
