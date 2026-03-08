@@ -28,16 +28,50 @@ export const chatCompletion = async (
             ...messages
         ];
 
-        const response = await groq.chat.completions.create({
-            model: DEFAULT_MODEL,
-            messages: fullMessages,
-            tools: tools.length > 0 ? tools : undefined,
-            tool_choice: "auto",
-            max_tokens: 4096,
-            temperature: 0.5,
-        });
+        let choice;
 
-        const choice = response.choices[0];
+        try {
+            const response = await groq.chat.completions.create({
+                model: DEFAULT_MODEL,
+                messages: fullMessages,
+                tools: tools.length > 0 ? tools : undefined,
+                tool_choice: "auto",
+                max_tokens: 4096,
+                temperature: 0.5,
+            });
+            choice = response.choices[0];
+        } catch (groqError: any) {
+            console.warn(`⚠️ Groq falló (${groqError.message}). Intentando fallback con OpenRouter...`);
+
+            if (!config.OPENROUTER_API_KEY) {
+                throw new Error("Groq falló y no hay OPENROUTER_API_KEY configurada.");
+            }
+
+            const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
+                    "X-Title": "GravityClaw"
+                },
+                body: JSON.stringify({
+                    model: config.OPENROUTER_MODEL,
+                    messages: fullMessages,
+                    tools: tools.length > 0 ? tools : undefined,
+                    max_tokens: 4096,
+                    temperature: 0.5,
+                })
+            });
+
+            if (!openRouterRes.ok) {
+                const errorText = await openRouterRes.text();
+                throw new Error(`Fallback OpenRouter falló: ${errorText}`);
+            }
+
+            const openRouterData = await openRouterRes.json();
+            choice = openRouterData.choices[0];
+        }
 
         return {
             content: choice?.message?.content || null,
