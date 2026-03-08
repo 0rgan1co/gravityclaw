@@ -31,7 +31,7 @@ async function setup() {
 
         const tarPath = path.join('/tmp', 'gog-creds.tar.gz');
         fs.writeFileSync(tarPath, Buffer.from(process.env.GOGCLI_CREDENTIALS_B64, 'base64'));
-        execSync(`tar -xzf ${tarPath} -C ${configDir}`);
+        execSync(`tar -xzf ${tarPath} -C ${configDir} 2>/dev/null`);
 
         try {
             console.log("[Setup] Forcing keyring_backend configuration to 'file'");
