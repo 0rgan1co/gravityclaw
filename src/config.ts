@@ -11,6 +11,7 @@ const envSchema = z.object({
     ZAI_MODEL: z.string().default('glm-4-plus'),
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_MODEL: z.string().default('openrouter/free'),
+    OPENROUTER_CODING_MODEL: z.string().default('anthropic/claude-4.6-opus'),
     DB_PATH: z.string().default('./memory.db'),
     SPEECHIFY_API_KEY: z.string().optional(),
 });
@@ -30,6 +31,7 @@ export const config = {
     ZAI_MODEL: envParsed.data.ZAI_MODEL,
     OPENROUTER_API_KEY: envParsed.data.OPENROUTER_API_KEY,
     OPENROUTER_MODEL: envParsed.data.OPENROUTER_MODEL,
+    OPENROUTER_CODING_MODEL: envParsed.data.OPENROUTER_CODING_MODEL,
     DB_PATH: envParsed.data.DB_PATH,
     SPEECHIFY_API_KEY: envParsed.data.SPEECHIFY_API_KEY,
 };

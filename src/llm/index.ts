@@ -30,6 +30,49 @@ export const chatCompletion = async (
 
         let choice;
 
+        // --- DETECCIÓN DE INTENCIÓN DE CÓDIGO ---
+        // Extraemos el último mensaje del usuario para evaluar qué está pidiendo.
+        const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content?.toLowerCase() || '';
+        const isCodingRequest = lastUserMsg.includes('app') || lastUserMsg.includes('programar') ||
+            lastUserMsg.includes('aplicacion') || lastUserMsg.includes('aplicación') ||
+            lastUserMsg.includes('codigo') || lastUserMsg.includes('código');
+
+        if (isCodingRequest && config.OPENROUTER_API_KEY) {
+            console.log(`[LLM] Detectamos que quieres programar una app. Saltando a OpenRouter (modelo premium: ${config.OPENROUTER_CODING_MODEL})...`);
+            try {
+                const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
+                        "X-Title": "GravityClaw"
+                    },
+                    body: JSON.stringify({
+                        model: config.OPENROUTER_CODING_MODEL,
+                        messages: fullMessages,
+                        tools: tools.length > 0 ? tools : undefined,
+                        max_tokens: 4096,
+                        temperature: 0.3, // Menor temperatura para programar más preciso
+                    })
+                });
+
+                if (openRouterRes.ok) {
+                    const openRouterData = await openRouterRes.json();
+                    return {
+                        content: openRouterData.choices[0]?.message?.content || null,
+                        toolCalls: openRouterData.choices[0]?.message?.tool_calls,
+                    };
+                } else {
+                    const errorText = await openRouterRes.text();
+                    console.warn(`[LLM] OpenRouter (Coding Model) falló: ${errorText}. Pasando a Groq/Z.ai...`);
+                }
+            } catch (err) {
+                console.error("[LLM] Excepción al llamar OpenRouter para código:", err);
+            }
+        }
+        // --- FIN DETECCIÓN DE CÓDIGO ---
+
         try {
             const response = await groq.chat.completions.create({
                 model: DEFAULT_MODEL,
