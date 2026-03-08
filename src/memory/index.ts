@@ -4,6 +4,29 @@ import Database from 'better-sqlite3';
 
 const localDb = new Database(config.DB_PATH);
 
+// Inicializar tablas locales si no existen (ideal para cuando se despliega en Railway desde cero)
+localDb.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT,
+        tool_calls TEXT,
+        tool_call_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS memories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        conversation_id TEXT,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        metadata_json TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+`);
+
 // Inicializa Firebase Admin SDK
 if (!admin.apps.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
