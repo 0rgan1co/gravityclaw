@@ -1,10 +1,11 @@
-import { Bot } from 'grammy';
+import { Bot, InputFile } from 'grammy';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import { processUserMessage } from '../agent/index.js';
 import { clearUserHistory } from '../memory/index.js';
 import { transcribeAudio } from '../llm/index.js';
+import { generateSpeechifyAudio } from '../speech/index.js';
 
 export const setupBot = () => {
     const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -32,22 +33,30 @@ export const setupBot = () => {
         }
     });
 
+    // Función auxiliar para enviar texto y audio opcional
+    const sendResponseWithAudio = async (ctx: any, agentResponse: string) => {
+        if (agentResponse.length > 4000) {
+            await ctx.reply(agentResponse.substring(0, 4000) + '... [truncado]');
+        } else {
+            await ctx.reply(agentResponse);
+        }
+
+        // Generar y enviar audio
+        if (config.SPEECHIFY_API_KEY) {
+            await ctx.replyWithChatAction('record_voice');
+            const audioBuffer = await generateSpeechifyAudio(agentResponse);
+            if (audioBuffer) {
+                await ctx.replyWithVoice(new InputFile(audioBuffer, "voice.mp3"));
+            }
+        }
+    };
+
     // Manejar mensajes de texto
     bot.on('message:text', async (ctx) => {
         try {
-            // Indicador visual de que el agente está escribiendo/pensando
             await ctx.replyWithChatAction('typing');
-
             const response = await processUserMessage(ctx.from.id, ctx.message.text);
-
-            // La API de Telegram tiene un límite de 4096 caracteres por mensaje.
-            // Si la respuesta es más larga, podríamos dividirla, pero para mantener la simplicidad:
-            if (response.length > 4000) {
-                await ctx.reply(response.substring(0, 4000) + '... [truncado]');
-            } else {
-                await ctx.reply(response);
-            }
-
+            await sendResponseWithAudio(ctx, response);
         } catch (error) {
             console.error("[Bot Error]", error);
             ctx.reply("Ups, ocurrió un error interno al procesar tu mensaje.");
@@ -96,12 +105,7 @@ export const setupBot = () => {
 
             // Procesar el texto transcrito de la misma forma que un mensaje de texto normal
             const agentResponse = await processUserMessage(ctx.from.id, transcribedText);
-
-            if (agentResponse.length > 4000) {
-                await ctx.reply(agentResponse.substring(0, 4000) + '... [truncado]');
-            } else {
-                await ctx.reply(agentResponse);
-            }
+            await sendResponseWithAudio(ctx, agentResponse);
 
         } catch (error) {
             console.error("[Bot Error Audio]", error);

@@ -10,6 +10,7 @@ const envSchema = z.object({
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_MODEL: z.string().default('openrouter/free'),
     DB_PATH: z.string().default('./memory.db'),
+    SPEECHIFY_API_KEY: z.string().optional(),
 });
 
 const envParsed = envSchema.safeParse(process.env);
@@ -26,4 +27,5 @@ export const config = {
     OPENROUTER_API_KEY: envParsed.data.OPENROUTER_API_KEY,
     OPENROUTER_MODEL: envParsed.data.OPENROUTER_MODEL,
     DB_PATH: envParsed.data.DB_PATH,
+    SPEECHIFY_API_KEY: envParsed.data.SPEECHIFY_API_KEY,
 };
