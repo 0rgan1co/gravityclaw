@@ -2,14 +2,15 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { AgentTool } from './index.js';
 
 const execAsync = promisify(exec);
 
 async function runGogCommand(command: string): Promise<string> {
     try {
-        const localBin = path.join(process.cwd(), 'bin', 'gog');
-        const gogPath = fs.existsSync(localBin) ? localBin : 'gog';
+        const localBinLinux = path.join(process.cwd(), 'bin', 'gog-linux');
+        const gogPath = (os.platform() === 'linux' && fs.existsSync(localBinLinux)) ? localBinLinux : 'gog';
         // Reemplazar la palabra "gog " inicial por la ruta real
         const actualCommand = command.startsWith('gog ') ? `${gogPath} ${command.slice(4)}` : command;
 
