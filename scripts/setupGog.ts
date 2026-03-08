@@ -38,6 +38,15 @@ async function setup() {
         const tarPath = path.join('/tmp', 'gog-creds.tar.gz');
         fs.writeFileSync(tarPath, Buffer.from(process.env.GOGCLI_CREDENTIALS_B64, 'base64'));
         execSync(`tar -xzf ${tarPath} -C ${configDir}`);
+
+        try {
+            console.log("[Setup] Forcing keyring_backend configuration to 'file'");
+            const gogCmd = fs.existsSync(path.join(binDir, 'gog')) ? path.join(binDir, 'gog') : 'gog';
+            execSync(`${gogCmd} config set keyring_backend file`);
+        } catch (e) {
+            console.error("[Setup] Warning: Could not configure keyring_backend. Continuing.", e);
+        }
+
         console.log("[Setup] Keyring restored successfully.");
     } else {
         console.warn("[Setup] Warning: GOGCLI_CREDENTIALS_B64 environment variable not found.");
