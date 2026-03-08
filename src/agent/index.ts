@@ -1,4 +1,4 @@
-import { addMessage, getMessageHistory, addToolCallMessage, addToolResponseMessage, getRelevantMemories } from '../memory/index.js';
+import { addMessage, getMessageHistory, addToolCallMessage, addToolResponseMessage, getRelevantMemories, getUserSettings } from '../memory/index.js';
 import { chatCompletion, LLMResponse } from '../llm/index.js';
 import { executeTool } from '../tools/index.js';
 
@@ -10,6 +10,9 @@ const MAX_ITERATIONS = 5;
 export const processUserMessage = async (userId: number, text: string): Promise<string> => {
     // 1. Guardar mensaje del usuario
     await addMessage(userId, 'user', text);
+
+    // Obtener configuración del usuario para el LLM
+    const userSettings = getUserSettings(userId);
 
     let iterations = 0;
 
@@ -31,7 +34,7 @@ export const processUserMessage = async (userId: number, text: string): Promise<
         }
 
         // 3. Consultar al LLM
-        const response: LLMResponse = await chatCompletion(history);
+        const response: LLMResponse = await chatCompletion(userId, userSettings, history);
 
         // 4. Evaluar si la IA necesita usar herramientas
         if (response.toolCalls && response.toolCalls.length > 0) {

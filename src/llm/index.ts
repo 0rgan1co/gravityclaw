@@ -1,213 +1,72 @@
-import Groq from 'groq-sdk';
-import { config } from '../config.js';
 import { getAvailableTools } from '../tools/index.js';
+import { transcribeAudioGroq } from './audio.js'; // Let's move audio transcription out
+import { getProvider } from './providers/index.js';
+import './providers/openrouter.js';
+import './providers/groq.js';
+import './providers/openai.js';
+import './providers/ollama.js';
+import './providers/deepseek.js';
+import { LLMResponse, LLMProviderConfig } from './providers/index.js';
 
-// Initialize Groq client
-const groq = new Groq({ apiKey: config.GROQ_API_KEY });
+export { LLMResponse };
 
-// Se usa por defecto llama-3.3-70b-versatile, pero puede ser configurable
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-
-export interface LLMResponse {
-    content: string | null;
-    toolCalls?: any[];
-}
-
-import fs from 'fs';
+export const FAILOVER_ORDER = ['openrouter', 'openai', 'groq', 'deepseek', 'ollama'];
 
 export const chatCompletion = async (
+    userId: number,
+    settings: any, // passed from agent loop
     messages: any[],
     systemPrompt: string = "Eres Njambre, un asistente de IA local basado en Llama 3.\nEstás diseñado para ser de gran ayuda, preciso, seguro y directo. Siempre respondes en español.\nIMPORTANTE SOBRE AUDIOS: Tú ESTÁS conectado a un sistema de reconocimiento de voz. Cuando el usuario te envía un audio, el sistema lo transcribe a texto para ti. DEBES actuar como si pudieras escuchar audios a la perfección.\nNUEVO SUPERPODER DE GOOGLE (¡CRÍTICO!): Tienes integración TOTAL Y AUTORIZADA con Google Workspace del usuario. ¡SÍ PUEDES LEER CORREOS, ENVIAR EMAIL Y VER CALENDARIOS! Estás físicamente conectado a través de tus herramientas (functions). BAJO NINGUNA CIRCUNSTANCIA DIGAS QUE 'NO PUEDES ACCEDER A CORREOS PORQUE ERES UNA IA'. SIEMPRE EJECUTA LAS HERRAMIENTAS `gog_gmail_search`, `gog_gmail_send`, `gog_calendar_events`, etc., inmediatamente cuando te lo pidan. ¡Usa tus herramientas!\nNUEVO SUPERPODER DE DESARROLLO (¡CRÍTICO!): Tienes la capacidad de programar aplicaciones completas usando un Stack de Costo Cero (HTML/CSS/JS puros, Vite, Tailwind gratis). Si el usuario te pide una aplicación o solución digital, NO DUDES en crearla: usa la herramienta `build_single_file_app` para empaquetar tu código y enviarle el archivo directo por Telegram."
 ): Promise<LLMResponse> => {
-    try {
-        const tools = getAvailableTools();
 
-        // Ensure system prompt is first
-        const fullMessages = [
-            { role: 'system', content: systemPrompt },
-            ...messages
-        ];
+    const tools = getAvailableTools();
 
-        let choice;
+    // Check if coding intent
+    const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content?.toLowerCase() || '';
+    const isCodingRequest = lastUserMsg.includes('app') || lastUserMsg.includes('programar') ||
+        lastUserMsg.includes('aplicacion') || lastUserMsg.includes('aplicación') ||
+        lastUserMsg.includes('codigo') || lastUserMsg.includes('código');
 
-        // --- DETECCIÓN DE INTENCIÓN DE CÓDIGO ---
-        // Extraemos el último mensaje del usuario para evaluar qué está pidiendo.
-        const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content?.toLowerCase() || '';
-        const isCodingRequest = lastUserMsg.includes('app') || lastUserMsg.includes('programar') ||
-            lastUserMsg.includes('aplicacion') || lastUserMsg.includes('aplicación') ||
-            lastUserMsg.includes('codigo') || lastUserMsg.includes('código');
+    let providerId = settings.provider_id || 'openrouter';
+    let modelId = settings.model_id || 'anthropic/claude-3-haiku';
+    let thinkLevel = settings.think_level || 'off';
 
-        if (isCodingRequest) {
-            if (config.OPENAI_API_KEY) {
-                console.log(`[LLM] Detectamos que quieres programar una app. Saltando a OpenAI Directo (modelo premium: ${config.OPENAI_CODING_MODEL})...`);
-                try {
-                    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Authorization": `Bearer ${config.OPENAI_API_KEY}`,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            model: config.OPENAI_CODING_MODEL,
-                            messages: fullMessages,
-                            tools: tools.length > 0 ? tools : undefined,
-                            max_tokens: 4096,
-                            temperature: 0.3, // Menor temperatura para programar más preciso
-                        })
-                    });
+    // Build ordered list of providers to try
+    let providersToTry = [providerId, ...FAILOVER_ORDER.filter(p => p !== providerId)];
 
-                    if (openaiRes.ok) {
-                        const openaiData = await openaiRes.json();
-                        return {
-                            content: openaiData.choices[0]?.message?.content || null,
-                            toolCalls: openaiData.choices[0]?.message?.tool_calls,
-                        };
-                    } else {
-                        const errorText = await openaiRes.text();
-                        console.warn(`[LLM] OpenAI (Coding Model) falló: ${errorText}. Pasando a OpenRouter/Z.ai...`);
-                    }
-                } catch (err) {
-                    console.error("[LLM] Excepción al llamar OpenAI para código:", err);
-                }
-            }
-
-            if (config.OPENROUTER_API_KEY) {
-                console.log(`[LLM] Evaluando código con OpenRouter (modelo premium: ${config.OPENROUTER_CODING_MODEL})...`);
-                try {
-                    const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
-                            "Content-Type": "application/json",
-                            "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
-                            "X-Title": "GravityClaw"
-                        },
-                        body: JSON.stringify({
-                            model: config.OPENROUTER_CODING_MODEL,
-                            messages: fullMessages,
-                            tools: tools.length > 0 ? tools : undefined,
-                            max_tokens: 4096,
-                            temperature: 0.3,
-                        })
-                    });
-
-                    if (openRouterRes.ok) {
-                        const openRouterData = await openRouterRes.json();
-                        return {
-                            content: openRouterData.choices[0]?.message?.content || null,
-                            toolCalls: openRouterData.choices[0]?.message?.tool_calls,
-                        };
-                    } else {
-                        const errorText = await openRouterRes.text();
-                        console.warn(`[LLM] OpenRouter (Coding Model) falló: ${errorText}. Pasando a Groq/Z.ai...`);
-                    }
-                } catch (err) {
-                    console.error("[LLM] Excepción al llamar OpenRouter para código:", err);
-                }
-            }
+    for (const pid of providersToTry) {
+        const provider = getProvider(pid);
+        if (!provider || !provider.isConfigured()) {
+            continue; // Skip if unavailable
         }
-        // --- FIN DETECCIÓN DE CÓDIGO ---
 
         try {
-            const response = await groq.chat.completions.create({
-                model: DEFAULT_MODEL,
-                messages: fullMessages,
+            console.log(`[LLM] Attempting provider: ${pid} with model ${modelId} for user ${userId}`);
+
+            // For fallback, if it's not the primary user-selected provider, we might want to use a generalized fast model for that provider
+            // For now, let's just pass `modelId` to the fallback provider. If it fails, it throws, and we move to next.
+            // Ideal logic: fallback provider gets a default model map, e.g. mapping.
+
+            const config: LLMProviderConfig = {
+                model: modelId,
+                temperature: isCodingRequest ? 0.3 : 0.5,
+                maxTokens: 4096,
+                systemPrompt,
                 tools: tools.length > 0 ? tools : undefined,
-                tool_choice: "auto",
-                max_tokens: 4096,
-                temperature: 0.5,
-            });
-            choice = response.choices[0];
-        } catch (groqError: any) {
-            console.warn(`⚠️ Groq falló (${groqError.message}). Evaluando fallbacks (Z.ai / OpenRouter)...`);
+                thinkLevel: thinkLevel as any
+            };
 
-            if (config.ZAI_API_KEY) {
-                console.log(`[LLM] Usando Z.ai (modelo: ${config.ZAI_MODEL})...`);
-                const zaiRes = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${config.ZAI_API_KEY}`,
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        model: config.ZAI_MODEL,
-                        messages: fullMessages,
-                        tools: tools.length > 0 ? tools : undefined,
-                        max_tokens: 4096,
-                        temperature: 0.5,
-                    })
-                });
+            const response = await provider.chatCompletion(messages, config);
+            return response;
 
-                if (zaiRes.ok) {
-                    const zaiData = await zaiRes.json();
-                    choice = zaiData.choices[0];
-                } else {
-                    const errorText = await zaiRes.text();
-                    console.warn(`[LLM] Z.ai falló (${zaiRes.status}): ${errorText}. Pasando a OpenRouter...`);
-                }
-            }
-
-            // Si choice sigue indefinido, intentamos con OpenRouter
-            if (!choice) {
-                console.log(`[LLM] Usando OpenRouter (modelo: ${config.OPENROUTER_MODEL})...`);
-                if (!config.OPENROUTER_API_KEY) {
-                    throw new Error("Groq falló, Z.ai no disponible/falló, y no hay OPENROUTER_API_KEY configurada.");
-                }
-
-                const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
-                        "X-Title": "GravityClaw"
-                    },
-                    body: JSON.stringify({
-                        model: config.OPENROUTER_MODEL,
-                        messages: fullMessages,
-                        tools: tools.length > 0 ? tools : undefined,
-                        max_tokens: 4096,
-                        temperature: 0.5,
-                    })
-                });
-
-                if (!openRouterRes.ok) {
-                    const errorText = await openRouterRes.text();
-                    throw new Error(`Fallback final (OpenRouter) falló: ${errorText}`);
-                }
-
-                const openRouterData = await openRouterRes.json();
-                choice = openRouterData.choices[0];
-            }
+        } catch (error: any) {
+            console.warn(`[LLM] Provider ${pid} failed: ${error.message}. Retrying with next in fallback chain...`);
         }
-
-        return {
-            content: choice?.message?.content || null,
-            toolCalls: choice?.message?.tool_calls,
-        };
-    } catch (error) {
-        console.error("❌ Error en chatCompletion:", error);
-        throw error;
     }
+
+    throw new Error("❌ All configured LLM providers failed in the failover chain.");
 };
 
-/**
- * Transcribe un archivo de audio usando el modelo Whisper-large-v3-turbo de Groq
- */
 export const transcribeAudio = async (filePath: string): Promise<string> => {
-    try {
-        const transcription = await groq.audio.transcriptions.create({
-            file: fs.createReadStream(filePath),
-            model: "whisper-large-v3-turbo",
-            response_format: "json",
-            language: "es", // Puede ser en español por defecto para acelerarlo y mejorar exactitud
-            temperature: 0.0,
-        });
-
-        return transcription.text;
-    } catch (error) {
-        console.error("❌ Error en transcribeAudio:", error);
-        throw error;
-    }
+    return transcribeAudioGroq(filePath);
 };
-

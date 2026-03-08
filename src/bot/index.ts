@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import { processUserMessage } from '../agent/index.js';
-import { clearUserHistory } from '../memory/index.js';
+import { clearUserHistory, updateUserSettings } from '../memory/index.js';
 import { transcribeAudio } from '../llm/index.js';
 import { generateSpeechifyAudio } from '../speech/index.js';
 
@@ -31,6 +31,31 @@ export const setupBot = () => {
             await clearUserHistory(ctx.from.id);
             ctx.reply('Memoria borrada. Hemos empezado una nueva conversación.');
         }
+    });
+
+    bot.command('model', async (ctx) => {
+        if (!ctx.from) return;
+        const args = ctx.match.split(' ');
+        if (args.length < 2) {
+            return ctx.reply('Uso: /model <provider> <model_id>\nEjemplo: /model openrouter anthropic/claude-3-haiku\nProviders disponibles: openrouter, openai, groq, ollama, deepseek');
+        }
+
+        const providerId = args[0].toLowerCase();
+        const modelId = args[1];
+
+        updateUserSettings(ctx.from.id, { provider_id: providerId, model_id: modelId });
+        ctx.reply(`✅ Modelo actualizado: Proveedor **${providerId}** con el modelo **${modelId}**`, { parse_mode: 'Markdown' });
+    });
+
+    bot.command('think', async (ctx) => {
+        if (!ctx.from) return;
+        const level = ctx.match.toLowerCase() as any;
+        if (!['off', 'low', 'medium', 'high'].includes(level)) {
+            return ctx.reply('Uso: /think <off|low|medium|high>\nEjemplo: /think medium');
+        }
+
+        updateUserSettings(ctx.from.id, { think_level: level });
+        ctx.reply(`✅ Nivel de pensamiento iterativo seteado a: **${level}**`, { parse_mode: 'Markdown' });
     });
 
     // Función auxiliar para enviar texto, audio opcional, y archivos

@@ -25,6 +25,13 @@ localDb.exec(`
         metadata_json TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+        user_id INTEGER PRIMARY KEY,
+        provider_id TEXT NOT NULL DEFAULT 'openrouter',
+        model_id TEXT NOT NULL DEFAULT 'anthropic/claude-3-haiku',
+        think_level TEXT NOT NULL DEFAULT 'off'
+    );
 `);
 
 // Inicializa Firebase Admin SDK
@@ -231,4 +238,38 @@ export const getRelevantMemories = (userId: number, limit: number = 5): Memory[]
 export const deleteMemory = (memoryId: number) => {
     const stmt = localDb.prepare('DELETE FROM memories WHERE id = ?');
     stmt.run(memoryId);
+};
+
+// --- USER SETTINGS ---
+
+export interface UserSettings {
+    user_id: number;
+    provider_id: string;
+    model_id: string;
+    think_level: 'off' | 'low' | 'medium' | 'high';
+}
+
+export const getUserSettings = (userId: number): UserSettings => {
+    const stmt = localDb.prepare('SELECT * FROM user_settings WHERE user_id = ?');
+    const settings = stmt.get(userId) as UserSettings | undefined;
+    if (settings) return settings;
+
+    // Default settings
+    return {
+        user_id: userId,
+        provider_id: 'openrouter',
+        model_id: 'anthropic/claude-3-haiku',
+        think_level: 'off'
+    };
+};
+
+export const updateUserSettings = (userId: number, updates: Partial<UserSettings>) => {
+    const current = getUserSettings(userId);
+    const updated = { ...current, ...updates, user_id: userId };
+    
+    const stmt = localDb.prepare(`
+        INSERT OR REPLACE INTO user_settings (user_id, provider_id, model_id, think_level)
+        VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(updated.user_id, updated.provider_id, updated.model_id, updated.think_level);
 };
