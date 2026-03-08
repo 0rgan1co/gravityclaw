@@ -16,10 +16,14 @@ async function setup() {
     // Check if gog is already downloaded
     if (!fs.existsSync(path.join(binDir, 'gog'))) {
         console.log("[Setup] Downloading gogcli for Linux...");
-        execSync(`curl -sL ${gogUrl} | tar -xz -C ${binDir} gogcli`);
-        execSync(`mv ${binDir}/gogcli ${binDir}/gog`);
-        execSync(`chmod +x ${binDir}/gog`);
-        console.log("[Setup] gogcli installed to ./bin/gog");
+        try {
+            execSync(`curl -sL ${gogUrl} | tar -xz -C ${binDir} gog`);
+            execSync(`chmod +x ${binDir}/gog`);
+            console.log("[Setup] gogcli installed to ./bin/gog");
+        } catch (err) {
+            console.error("[Setup] Error downloading/installing gog:", err);
+            // Optionally process.exit(1) to fail the build if required
+        }
     }
 
     if (process.env.GOGCLI_CREDENTIALS_B64) {

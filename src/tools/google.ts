@@ -1,20 +1,24 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
 import { AgentTool } from './index.js';
 
 const execAsync = promisify(exec);
 
 async function runGogCommand(command: string): Promise<string> {
     try {
-        // En Railway usaremos un binario descargado localmente si no existe de forma global
-        const binPath = `${process.cwd()}/bin`;
+        const localBin = path.join(process.cwd(), 'bin', 'gog');
+        const gogPath = fs.existsSync(localBin) ? localBin : 'gog';
+        // Reemplazar la palabra "gog " inicial por la ruta real
+        const actualCommand = command.startsWith('gog ') ? `${gogPath} ${command.slice(4)}` : command;
+
         const env = {
             ...process.env,
-            PATH: `${binPath}:${process.env.PATH || ''}`,
             GOG_KEYRING_PASSPHRASE: 'gravity'
         };
 
-        const { stdout, stderr } = await execAsync(command, { env });
+        const { stdout, stderr } = await execAsync(actualCommand, { env });
         if (stderr && !stdout) {
             return `Warning/Error: ${stderr}`;
         }
