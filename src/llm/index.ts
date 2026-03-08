@@ -13,6 +13,8 @@ export interface LLMResponse {
     toolCalls?: any[];
 }
 
+import fs from 'fs';
+
 export const chatCompletion = async (
     messages: any[],
     systemPrompt: string = "Eres OpenGravity, un asistente de IA local basado en Llama 3. \nEstás diseñado para ser de gran ayuda, preciso, seguro y directo. Siempre respondes en español. Tienes acceso a varias herramientas para ayudar al usuario."
@@ -46,3 +48,24 @@ export const chatCompletion = async (
         throw error;
     }
 };
+
+/**
+ * Transcribe un archivo de audio usando el modelo Whisper-large-v3-turbo de Groq
+ */
+export const transcribeAudio = async (filePath: string): Promise<string> => {
+    try {
+        const transcription = await groq.audio.transcriptions.create({
+            file: fs.createReadStream(filePath),
+            model: "whisper-large-v3-turbo",
+            response_format: "json",
+            language: "es", // Puede ser en español por defecto para acelerarlo y mejorar exactitud
+            temperature: 0.0,
+        });
+
+        return transcription.text;
+    } catch (error) {
+        console.error("❌ Error en transcribeAudio:", error);
+        throw error;
+    }
+};
+

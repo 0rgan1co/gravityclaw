@@ -1,7 +1,10 @@
 import { Bot } from 'grammy';
+import fs from 'fs';
+import path from 'path';
 import { config } from '../config.js';
 import { processUserMessage } from '../agent/index.js';
 import { clearUserHistory } from '../memory/index.js';
+import { transcribeAudio } from '../llm/index.js';
 
 export const setupBot = () => {
     const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -48,6 +51,61 @@ export const setupBot = () => {
         } catch (error) {
             console.error("[Bot Error]", error);
             ctx.reply("Ups, ocurrió un error interno al procesar tu mensaje.");
+        }
+    });
+
+    // Manejar mensajes de voz
+    bot.on('message:voice', async (ctx) => {
+        try {
+            await ctx.replyWithChatAction('typing'); // Typing action works well enough for audio processing too
+
+            const fileId = ctx.message.voice.file_id;
+            const file = await ctx.api.getFile(fileId);
+
+            if (!file.file_path) {
+                await ctx.reply("No pude descargar el audio 😢");
+                return;
+            }
+
+            const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+
+            // Descargar el archivo temporalmente
+            const tempPath = path.join(process.cwd(), `${fileId}.ogg`);
+            const response = await fetch(url);
+            const buffer = await response.arrayBuffer();
+            fs.writeFileSync(tempPath, Buffer.from(buffer));
+
+            let transcribedText = "";
+            try {
+                // Transcribir con Groq Whisper
+                transcribedText = await transcribeAudio(tempPath);
+
+                // Responder opcionalmente indicando qué escuchó el bot
+                if (transcribedText?.trim()) {
+                    await ctx.reply(`🎤 _He escuchado:_ "${transcribedText}"`, { parse_mode: 'Markdown' });
+                }
+            } finally {
+                // Siempre limpiar el archivo temporal
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            }
+
+            if (!transcribedText || transcribedText.trim() === '') {
+                await ctx.reply("No pude entender bien el audio o estaba vacío 😢");
+                return;
+            }
+
+            // Procesar el texto transcrito de la misma forma que un mensaje de texto normal
+            const agentResponse = await processUserMessage(ctx.from.id, transcribedText);
+
+            if (agentResponse.length > 4000) {
+                await ctx.reply(agentResponse.substring(0, 4000) + '... [truncado]');
+            } else {
+                await ctx.reply(agentResponse);
+            }
+
+        } catch (error) {
+            console.error("[Bot Error Audio]", error);
+            ctx.reply("Ups, ocurrió un error interno al procesar tu audio.");
         }
     });
 
