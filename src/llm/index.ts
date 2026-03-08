@@ -34,6 +34,14 @@ export const chatCompletion = async (
     // Build ordered list of providers to try
     let providersToTry = [providerId, ...FAILOVER_ORDER.filter(p => p !== providerId)];
 
+    const FALLBACK_MODELS: Record<string, string> = {
+        'openai': 'gpt-4o',
+        'groq': 'llama3-8b-8192',
+        'deepseek': 'deepseek-chat',
+        'ollama': 'llama3.2',
+        'openrouter': 'openrouter/free'
+    };
+
     for (const pid of providersToTry) {
         const provider = getProvider(pid);
         if (!provider || !provider.isConfigured()) {
@@ -41,14 +49,11 @@ export const chatCompletion = async (
         }
 
         try {
-            console.log(`[LLM] Attempting provider: ${pid} with model ${modelId} for user ${userId}`);
-
-            // For fallback, if it's not the primary user-selected provider, we might want to use a generalized fast model for that provider
-            // For now, let's just pass `modelId` to the fallback provider. If it fails, it throws, and we move to next.
-            // Ideal logic: fallback provider gets a default model map, e.g. mapping.
+            const currentModelId = (pid === providerId) ? modelId : FALLBACK_MODELS[pid];
+            console.log(`[LLM] Attempting provider: ${pid} with model ${currentModelId} for user ${userId}`);
 
             const config: LLMProviderConfig = {
-                model: modelId,
+                model: currentModelId,
                 temperature: isCodingRequest ? 0.3 : 0.5,
                 maxTokens: 4096,
                 systemPrompt,

@@ -30,7 +30,9 @@ class OpenAIProvider implements LLMProvider {
         }
 
         if (providerConfig.thinkLevel && providerConfig.thinkLevel !== 'off') {
-            options.reasoning_effort = providerConfig.thinkLevel;
+            if (providerConfig.model.startsWith('o1') || providerConfig.model.startsWith('o3')) {
+                options.reasoning_effort = providerConfig.thinkLevel;
+            }
         }
 
         const res = await fetch("https://api.openai.com/v1/chat/completions", {
