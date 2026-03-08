@@ -35,16 +35,22 @@ export const setupBot = () => {
 
     // Función auxiliar para enviar texto y audio opcional
     const sendResponseWithAudio = async (ctx: any, agentResponse: string) => {
-        if (agentResponse.length > 4000) {
-            await ctx.reply(agentResponse.substring(0, 4000) + '... [truncado]');
-        } else {
-            await ctx.reply(agentResponse);
+        // Verificar si el modelo decidió enviar un audio
+        const shouldSendAudio = agentResponse.includes('<VOICE>');
+
+        // Limpiar la etiqueta para que no se vea en el texto final
+        const cleanResponse = agentResponse.replace(/<VOICE>/g, '').trim();
+
+        if (cleanResponse.length > 4000) {
+            await ctx.reply(cleanResponse.substring(0, 4000) + '... [truncado]');
+        } else if (cleanResponse.length > 0) {
+            await ctx.reply(cleanResponse);
         }
 
-        // Generar y enviar audio
-        if (config.SPEECHIFY_API_KEY) {
+        // Generar y enviar audio solo si lo solicitó
+        if (shouldSendAudio && config.SPEECHIFY_API_KEY) {
             await ctx.replyWithChatAction('record_voice');
-            const audioBuffer = await generateSpeechifyAudio(agentResponse);
+            const audioBuffer = await generateSpeechifyAudio(cleanResponse);
             if (audioBuffer) {
                 await ctx.replyWithVoice(new InputFile(audioBuffer, "voice.mp3"));
             }
