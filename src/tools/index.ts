@@ -1,4 +1,11 @@
 import { saveMemory, deleteMemory } from '../memory/index.js';
+import {
+    gogGmailSearchTool,
+    gogGmailSendTool,
+    gogCalendarListTool,
+    gogCalendarCreateTool,
+    gogDriveSearchTool
+} from './google.js';
 
 interface ToolDefinition {
     type: "function";
@@ -85,6 +92,11 @@ const toolsRegistry: Record<string, AgentTool> = {
     get_current_time: getCurrentTimeTool,
     save_memory: saveMemoryTool,
     delete_memory: deleteMemoryTool,
+    gog_gmail_search: gogGmailSearchTool,
+    gog_gmail_send: gogGmailSendTool,
+    gog_calendar_events: gogCalendarListTool,
+    gog_calendar_create: gogCalendarCreateTool,
+    gog_drive_search: gogDriveSearchTool,
 };
 
 
