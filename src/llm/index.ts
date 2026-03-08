@@ -37,38 +37,73 @@ export const chatCompletion = async (
             lastUserMsg.includes('aplicacion') || lastUserMsg.includes('aplicación') ||
             lastUserMsg.includes('codigo') || lastUserMsg.includes('código');
 
-        if (isCodingRequest && config.OPENROUTER_API_KEY) {
-            console.log(`[LLM] Detectamos que quieres programar una app. Saltando a OpenRouter (modelo premium: ${config.OPENROUTER_CODING_MODEL})...`);
-            try {
-                const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
-                        "X-Title": "GravityClaw"
-                    },
-                    body: JSON.stringify({
-                        model: config.OPENROUTER_CODING_MODEL,
-                        messages: fullMessages,
-                        tools: tools.length > 0 ? tools : undefined,
-                        max_tokens: 4096,
-                        temperature: 0.3, // Menor temperatura para programar más preciso
-                    })
-                });
+        if (isCodingRequest) {
+            if (config.OPENAI_API_KEY) {
+                console.log(`[LLM] Detectamos que quieres programar una app. Saltando a OpenAI Directo (modelo premium: ${config.OPENAI_CODING_MODEL})...`);
+                try {
+                    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${config.OPENAI_API_KEY}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            model: config.OPENAI_CODING_MODEL,
+                            messages: fullMessages,
+                            tools: tools.length > 0 ? tools : undefined,
+                            max_tokens: 4096,
+                            temperature: 0.3, // Menor temperatura para programar más preciso
+                        })
+                    });
 
-                if (openRouterRes.ok) {
-                    const openRouterData = await openRouterRes.json();
-                    return {
-                        content: openRouterData.choices[0]?.message?.content || null,
-                        toolCalls: openRouterData.choices[0]?.message?.tool_calls,
-                    };
-                } else {
-                    const errorText = await openRouterRes.text();
-                    console.warn(`[LLM] OpenRouter (Coding Model) falló: ${errorText}. Pasando a Groq/Z.ai...`);
+                    if (openaiRes.ok) {
+                        const openaiData = await openaiRes.json();
+                        return {
+                            content: openaiData.choices[0]?.message?.content || null,
+                            toolCalls: openaiData.choices[0]?.message?.tool_calls,
+                        };
+                    } else {
+                        const errorText = await openaiRes.text();
+                        console.warn(`[LLM] OpenAI (Coding Model) falló: ${errorText}. Pasando a OpenRouter/Z.ai...`);
+                    }
+                } catch (err) {
+                    console.error("[LLM] Excepción al llamar OpenAI para código:", err);
                 }
-            } catch (err) {
-                console.error("[LLM] Excepción al llamar OpenRouter para código:", err);
+            }
+
+            if (config.OPENROUTER_API_KEY) {
+                console.log(`[LLM] Evaluando código con OpenRouter (modelo premium: ${config.OPENROUTER_CODING_MODEL})...`);
+                try {
+                    const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${config.OPENROUTER_API_KEY}`,
+                            "Content-Type": "application/json",
+                            "HTTP-Referer": "https://github.com/0rgan1co/gravityclaw",
+                            "X-Title": "GravityClaw"
+                        },
+                        body: JSON.stringify({
+                            model: config.OPENROUTER_CODING_MODEL,
+                            messages: fullMessages,
+                            tools: tools.length > 0 ? tools : undefined,
+                            max_tokens: 4096,
+                            temperature: 0.3,
+                        })
+                    });
+
+                    if (openRouterRes.ok) {
+                        const openRouterData = await openRouterRes.json();
+                        return {
+                            content: openRouterData.choices[0]?.message?.content || null,
+                            toolCalls: openRouterData.choices[0]?.message?.tool_calls,
+                        };
+                    } else {
+                        const errorText = await openRouterRes.text();
+                        console.warn(`[LLM] OpenRouter (Coding Model) falló: ${errorText}. Pasando a Groq/Z.ai...`);
+                    }
+                } catch (err) {
+                    console.error("[LLM] Excepción al llamar OpenRouter para código:", err);
+                }
             }
         }
         // --- FIN DETECCIÓN DE CÓDIGO ---
