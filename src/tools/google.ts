@@ -16,7 +16,7 @@ async function runGogCommand(command: string): Promise<string> {
 
         const env = {
             ...process.env,
-            GOG_KEYRING_PASSPHRASE: 'gravity'
+            GOG_KEYRING_PASSWORD: 'gravity'
         };
 
         const { stdout, stderr } = await execAsync(actualCommand, { env });
