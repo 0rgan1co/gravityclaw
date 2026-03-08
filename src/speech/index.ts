@@ -18,9 +18,7 @@ export const generateSpeechifyAudio = async (text: string): Promise<Buffer | nul
             },
             body: JSON.stringify({
                 input: text,
-                // Puedes usar diferentes voces. 'george' es un ejemplo de voz masculina en español o inglés
-                // Otras opciones: 'simon', 'cliff', etc. Speechify intentará detectar y usar el acento.
-                voice_id: "george"
+                voice_id: "luciana"
             })
         });
 
