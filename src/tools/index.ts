@@ -1,5 +1,6 @@
 import { saveMemory, deleteMemory } from '../memory/index.js';
 import { buildSingleFileAppTool } from './builder.js';
+import { githubTools, executeGitHubCommands } from './github.js';
 import {
     gogGmailSearchTool,
     gogGmailSendTool,
@@ -88,6 +89,13 @@ const deleteMemoryTool: AgentTool = {
     },
 };
 
+// GitHub CLI wrapper
+const githubCliTool: AgentTool = {
+    definition: githubTools[0] as ToolDefinition,
+    // execute assumes args is an object containing `arguments` string. We pass it properly to the underlying github commands file.
+    execute: (args?: any) => executeGitHubCommands("execute_github_cli", args)
+};
+
 // Registro centralizado de herramientas
 const toolsRegistry: Record<string, AgentTool> = {
     get_current_time: getCurrentTimeTool,
@@ -99,6 +107,7 @@ const toolsRegistry: Record<string, AgentTool> = {
     gog_calendar_create: gogCalendarCreateTool,
     gog_drive_search: gogDriveSearchTool,
     build_single_file_app: buildSingleFileAppTool,
+    execute_github_cli: githubCliTool,
 };
 
 
