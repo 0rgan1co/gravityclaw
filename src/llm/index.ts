@@ -1,12 +1,11 @@
 import { getAvailableTools } from '../tools/index.js';
-import { transcribeAudioGroq } from './audio.js'; // Let's move audio transcription out
-import { getProvider } from './providers/index.js';
+import { transcribeAudioGroq } from './audio.js';
+import { getProvider, type LLMResponse, type LLMProviderConfig } from './providers/index.js';
 import './providers/openrouter.js';
 import './providers/groq.js';
 import './providers/openai.js';
 import './providers/ollama.js';
 import './providers/deepseek.js';
-import { LLMResponse, LLMProviderConfig } from './providers/index.js';
 
 export { LLMResponse };
 
