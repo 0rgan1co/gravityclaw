@@ -7,11 +7,23 @@ const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const TOKEN_PATH = path.join(process.cwd(), 'google-token.json');
 
 export async function getAccessToken() {
-    if (!fs.existsSync(TOKEN_PATH)) {
-        throw new Error("No hay tokens de Google. Ejecuta 'node scripts/auth-google-nodeps.cjs' primero.");
+    let tokens: any;
+
+    if (process.env.GOOGLE_TOKEN_JSON) {
+        try {
+            tokens = JSON.parse(process.env.GOOGLE_TOKEN_JSON);
+        } catch (e) {
+            console.error("Error parseando GOOGLE_TOKEN_JSON env var");
+        }
     }
 
-    const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8'));
+    if (!tokens && fs.existsSync(TOKEN_PATH)) {
+        tokens = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8'));
+    }
+
+    if (!tokens) {
+        throw new Error("No hay tokens de Google. Configura la variable GOOGLE_TOKEN_JSON en Railway o ejecuta el script de auth local.");
+    }
 
     // Si el token ha expirado (o parece que va a expirar), lo refrescamos
     if (tokens.refresh_token) {
