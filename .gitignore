@@ -65,6 +65,9 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Compiled output
+dist/
+
 # dataconnect generated files
 .dataconnect
 
@@ -73,3 +76,4 @@ service-account.json
 memory.db
 client_secret_*.json
 credentials.json
+google-token.json

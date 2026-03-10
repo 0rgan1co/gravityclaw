@@ -1,12 +1,13 @@
 {
-  "name": "grativyclaw",
+  "name": "njambre",
   "version": "1.0.0",
   "description": "",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "prestart": "tsx scripts/setupGog.ts && tsx scripts/setupGh.ts",
-    "start": "tsx src/index.ts"
+    "build": "tsc",
+    "prestart": "node dist/scripts/setupGog.js && node dist/scripts/setupGh.js",
+    "start": "node dist/src/index.js"
   },
   "keywords": [],
   "author": "",
@@ -18,12 +19,12 @@
     "firebase-admin": "^13.7.0",
     "grammy": "^1.41.1",
     "groq-sdk": "^0.37.0",
+    "typescript": "^5.9.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.3.5",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "tsx": "^4.21.0"
   }
 }
