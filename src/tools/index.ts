@@ -1,4 +1,4 @@
-import { saveMemory, deleteMemory } from '../memory/index.js';
+import { saveMemory, deleteMemory, getRelevantMemories } from '../memory/index.js';
 import { buildSingleFileAppTool } from './builder.js';
 import { githubTools, executeGitHubCommands } from './github.js';
 import {
@@ -89,6 +89,31 @@ const deleteMemoryTool: AgentTool = {
     },
 };
 
+// Tool: Recuperar memorias adicionales
+const recallMemoryTool: AgentTool = {
+    definition: {
+        type: "function",
+        function: {
+            name: "recall_memory",
+            description: "Recupera memorias guardadas sobre un tema específico. Úsala si necesitas recordar detalles sobre algo que el usuario mencionó anteriormente y que no está en el historial reciente.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Término o tema para buscar en las memorias (ej. 'preferencias de café', 'datos de la empresa')" }
+                },
+                required: ["query"],
+            },
+        },
+    },
+    execute: (args?: any) => {
+        // En esta versión simple, buscamos las últimas memorias.
+        const memories = getRelevantMemories(args.userId || 0, 10);
+        if (memories.length === 0) return "No se encontraron memorias relacionadas.";
+        return memories.map(m => `- [${m.type}] ${m.content}`).join('\n');
+    },
+};
+
+
 // GitHub CLI wrapper
 const githubCliTool: AgentTool = {
     definition: githubTools[0] as ToolDefinition,
@@ -101,6 +126,7 @@ const toolsRegistry: Record<string, AgentTool> = {
     get_current_time: getCurrentTimeTool,
     save_memory: saveMemoryTool,
     delete_memory: deleteMemoryTool,
+    recall_memory: recallMemoryTool,
     gog_gmail_search: gogGmailSearchTool,
     gog_gmail_send: gogGmailSendTool,
     gog_calendar_events: gogCalendarListTool,

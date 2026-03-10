@@ -1,163 +1,170 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { getAccessToken } from '../google-auth.js';
 import { AgentTool } from './index.js';
+import https from 'https';
 
-const execAsync = promisify(exec);
+async function googleRequest(url: string, method: string = 'GET', body: any = null): Promise<any> {
+    const accessToken = await getAccessToken();
+    const urlObj = new URL(url);
 
-async function runGogCommand(command: string): Promise<string> {
-    try {
-        const localBinLinux = path.join(process.cwd(), 'bin', 'gog-linux');
-        const gogPath = (os.platform() === 'linux' && fs.existsSync(localBinLinux)) ? localBinLinux : 'gog';
-        // Reemplazar la palabra "gog " inicial por la ruta real
-        const actualCommand = command.startsWith('gog ') ? `${gogPath} ${command.slice(4)}` : command;
-
-        const env = {
-            ...process.env,
-            GOG_KEYRING_PASSWORD: 'gravity'
+    return new Promise((resolve, reject) => {
+        const options: any = {
+            hostname: urlObj.hostname,
+            path: urlObj.pathname + urlObj.search,
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
         };
 
-        const { stdout, stderr } = await execAsync(actualCommand, { env });
-        if (stderr && !stdout) {
-            return `Warning/Error: ${stderr}`;
-        }
-        return stdout || "Exito: Comando ejecutado sin salida en consola.";
-    } catch (error: any) {
-        return `Error ejecutando gog: ${error.message}\n${error.stderr || ''}`;
-    }
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', d => data += d);
+            res.on('end', () => {
+                if (res.statusCode && res.statusCode >= 400) {
+                    reject(new Error(`Google API Error (${res.statusCode}): ${data}`));
+                } else {
+                    resolve(data ? JSON.parse(data) : {});
+                }
+            });
+        });
+
+        req.on('error', reject);
+        if (body) req.write(JSON.stringify(body));
+        req.end();
+    });
 }
 
-// Gmail: Buscar correos
+// Herramientas de Google (Versión Directa API)
 export const gogGmailSearchTool: AgentTool = {
     definition: {
         type: "function",
         function: {
             name: "gog_gmail_search",
-            description: "Busca correos en Gmail usando sintaxis normal de búsqueda de Gmail.",
+            description: "Busca correos en Gmail.",
             parameters: {
                 type: "object",
                 properties: {
-                    query: { type: "string", description: "La consulta o término de búsqueda (ej. 'in:inbox is:unread', 'from:pedro@gmail.com')" },
-                    max: { type: "integer", description: "El número máximo de correos a traer (default 10, max 20)." }
+                    query: { type: "string" },
+                    maxResults: { type: "integer" }
                 },
-                required: ["query"],
-            },
-        },
+                required: ["query"]
+            }
+        }
     },
     execute: async (args: any) => {
-        const query = (args.query || '').replace(/"/g, '\\"');
-        const max = args.max || 10;
-        return await runGogCommand(`gog gmail messages search "${query}" --max ${max} --account njambre.bot@gmail.com`);
-    },
+        const query = encodeURIComponent(args.query);
+        const max = args.maxResults || 10;
+        const data: any = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${max}`);
+        if (!data.messages) return "No se encontraron mensajes.";
+        const results = [];
+        for (const m of data.messages) {
+            const detail: any = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=minimal`);
+            results.push(`- ID: ${m.id} | ${detail.snippet}`);
+        }
+        return results.join('\n');
+    }
 };
 
-// Gmail: Enviar correo
 export const gogGmailSendTool: AgentTool = {
     definition: {
         type: "function",
         function: {
             name: "gog_gmail_send",
-            description: "Envía un correo electrónico a uno o más destinatarios.",
+            description: "Envía un correo.",
             parameters: {
                 type: "object",
                 properties: {
-                    to: { type: "string", description: "Dirección(es) de destino, separadas por coma si son varias." },
-                    subject: { type: "string", description: "El asunto del correo." },
-                    body: { type: "string", description: "El contenido principal del correo en texto plano." }
+                    to: { type: "string" },
+                    subject: { type: "string" },
+                    body: { type: "string" }
                 },
-                required: ["to", "subject", "body"],
-            },
-        },
+                required: ["to", "subject", "body"]
+            }
+        }
     },
     execute: async (args: any) => {
-        const to = args.to.replace(/"/g, '\\"');
-        const subject = args.subject.replace(/"/g, '\\"');
-        const bodyContent = args.body;
-
-        // Es más confiable mandarlo usando body-file via stdin de gog
-        // para soportar saltos de línea sin que rompa Bash. 
-        // Generaremos el comando redirigiendo el contenido por tubería (echo/printf) al stdin de gog
-
-        // Pero echo tiene comportamientos distintos. Haremos un string escapeado para bash:
-        const safeBody = bodyContent.replace(/'/g, "'\\''");
-        const command = `printf '%s' '${safeBody}' | gog gmail send --to "${to}" --subject "${subject}" --body-file - --account njambre.bot@gmail.com`;
-
-        return await runGogCommand(command);
-    },
+        const messageParts = [
+            `to: ${args.to}`,
+            `subject: ${args.subject}`,
+            '',
+            args.body
+        ];
+        const raw = Buffer.from(messageParts.join('\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        await googleRequest('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', 'POST', { raw });
+        return "Correo enviado.";
+    }
 };
 
-// Calendar: Listar eventos
 export const gogCalendarListTool: AgentTool = {
     definition: {
         type: "function",
         function: {
             name: "gog_calendar_events",
-            description: "Lista eventos del calendario en un rango de fechas.",
+            description: "Lista eventos del calendario.",
             parameters: {
                 type: "object",
                 properties: {
-                    from: { type: "string", description: "Fecha inicio en formato ISO (ej. 2026-03-01T00:00:00Z) o fechas relativas comp 'today', 'tomorrow'" },
-                    to: { type: "string", description: "Fecha fin en formato ISO o relativas (ej. 'next week', 'tomorrow')" }
+                    timeMin: { type: "string" },
+                    timeMax: { type: "string" }
                 },
-                required: ["from", "to"],
-            },
-        },
+                required: ["timeMin", "timeMax"]
+            }
+        }
     },
     execute: async (args: any) => {
-        const fromDate = args.from;
-        const toDate = args.to;
-        return await runGogCommand(`gog calendar events primary --from "${fromDate}" --to "${toDate}" --account njambre.bot@gmail.com`);
-    },
+        const data: any = await googleRequest(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(args.timeMin)}&timeMax=${encodeURIComponent(args.timeMax)}&singleEvents=true&orderBy=startTime`);
+        if (!data.items) return "No hay eventos.";
+        return data.items.map((i: any) => `- ${i.start.dateTime || i.start.date}: ${i.summary}`).join('\n');
+    }
 };
 
-// Calendar: Crear evento
 export const gogCalendarCreateTool: AgentTool = {
     definition: {
         type: "function",
         function: {
             name: "gog_calendar_create",
-            description: "Crea un nuevo evento rápido en Google Calendar.",
+            description: "Crea un evento.",
             parameters: {
                 type: "object",
                 properties: {
-                    summary: { type: "string", description: "Título o resumen del evento." },
-                    from: { type: "string", description: "Fecha inicio en formato ISO o natural (e.g. '2026-03-08T15:00:00-03:00' o 'tomorrow 3pm')." },
-                    to: { type: "string", description: "Fecha fin en formato ISO o natural (e.g. '2026-03-08T16:00:00-03:00' o 'tomorrow 4pm')." },
-                    color: { type: "integer", description: "OPCIONAL Color ID (1-11). Ej: 1(azul claro), 4(rojo oscuro), 10(verde), 11(rojo vivo)." }
+                    summary: { type: "string" },
+                    start: { type: "string" },
+                    end: { type: "string" }
                 },
-                required: ["summary", "from", "to"],
-            },
-        },
+                required: ["summary", "start", "end"]
+            }
+        }
     },
     execute: async (args: any) => {
-        const summary = args.summary.replace(/"/g, '\\"');
-        const colorArg = args.color ? `--event-color ${args.color}` : "";
-        return await runGogCommand(`gog calendar create primary --summary "${summary}" --from "${args.from}" --to "${args.to}" ${colorArg} --account njambre.bot@gmail.com`);
-    },
+        const body = {
+            summary: args.summary,
+            start: { dateTime: args.start },
+            end: { dateTime: args.end }
+        };
+        const data: any = await googleRequest('https://www.googleapis.com/calendar/v3/calendars/primary/events', 'POST', body);
+        return `Evento creado: ${data.htmlLink}`;
+    }
 };
 
-// Drive: Buscar
 export const gogDriveSearchTool: AgentTool = {
     definition: {
         type: "function",
         function: {
             name: "gog_drive_search",
-            description: "Busca archivos en Google Drive.",
+            description: "Busca en Drive.",
             parameters: {
                 type: "object",
                 properties: {
-                    query: { type: "string", description: "Terminos de busqueda (ej. title contains 'factura')" },
-                    max: { type: "integer", description: "Límite máximo de resultados (Default 10)" }
+                    q: { type: "string" }
                 },
-                required: ["query"],
-            },
-        },
+                required: ["q"]
+            }
+        }
     },
     execute: async (args: any) => {
-        const query = args.query.replace(/"/g, '\\"');
-        const max = args.max || 10;
-        return await runGogCommand(`gog drive search "${query}" --max ${max} --account njambre.bot@gmail.com`);
-    },
+        const data: any = await googleRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(args.q)}`);
+        if (!data.files) return "No se encontraron archivos.";
+        return data.files.map((f: any) => `- ${f.name} (${f.id})`).join('\n');
+    }
 };

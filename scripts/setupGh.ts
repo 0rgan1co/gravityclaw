@@ -36,19 +36,21 @@ async function downloadGh() {
     try {
         if (url.endsWith('.tar.gz')) {
             const tarPath = path.join('/tmp', 'gh.tar.gz');
-            const response = await fetch(url);
-            const buffer = await response.arrayBuffer();
-            fs.writeFileSync(tarPath, Buffer.from(buffer));
-            execSync(`tar -xzf ${tarPath} -C /tmp 2>/dev/null`);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            fs.writeFileSync(tarPath, Buffer.from(await res.arrayBuffer()));
+
+            execSync(`tar -xzf ${tarPath} -C /tmp 2>/dev/null || true`);
             const extractedBin = path.join('/tmp', 'gh_2.45.0_linux_amd64', 'bin', 'gh');
             fs.copyFileSync(extractedBin, localGhPath);
         } else if (url.endsWith('.zip')) {
             const zipPath = path.join('/tmp', 'gh.zip');
-            const response = await fetch(url);
-            const buffer = await response.arrayBuffer();
-            fs.writeFileSync(zipPath, Buffer.from(buffer));
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            fs.writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+
             const folderName = arch === 'arm64' ? 'gh_2.45.0_macOS_arm64' : 'gh_2.45.0_macOS_amd64';
-            execSync(`unzip -o ${zipPath} -d /tmp`);
+            execSync(`unzip -o ${zipPath} -d /tmp 2>/dev/null || true`);
             const extractedBin = path.join('/tmp', folderName, 'bin', 'gh');
             fs.copyFileSync(extractedBin, localGhPath);
         }

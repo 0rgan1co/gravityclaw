@@ -1,11 +1,14 @@
 import { Bot, InputFile } from 'grammy';
 import fs from 'fs';
-import path from 'path';
 import { config } from '../config.js';
 import { processUserMessage } from '../agent/index.js';
 import { clearUserHistory, updateUserSettings } from '../memory/index.js';
-import { transcribeAudio } from '../llm/index.js';
-import { generateSpeechifyAudio } from '../speech/index.js';
+import {
+    transcribeVoiceMessage,
+    generateSpeechifyAudio,
+    isTalkModeOn,
+    toggleTalkMode,
+} from '../voice/index.js';
 
 export const setupBot = () => {
     const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -23,7 +26,7 @@ export const setupBot = () => {
 
     // Comando /start
     bot.command('start', (ctx) => {
-        ctx.reply('Hola. Soy OpenGravity, tu agente personal e interfaz inteligente. Estoy listo para ayudarte. Usa /clear para reiniciar tu memoria.');
+        ctx.reply('Hola. Soy OpenGravity, tu agente personal e interfaz inteligente. Estoy listo para ayudarte. Usa /clear para reiniciar tu memoria y /talk para activar el modo conversación por voz.');
     });
 
     bot.command('clear', async (ctx) => {
@@ -58,10 +61,24 @@ export const setupBot = () => {
         ctx.reply(`✅ Nivel de pensamiento iterativo seteado a: **${level}**`, { parse_mode: 'Markdown' });
     });
 
+    // Comando /talk — Activa/desactiva el Talk Mode (respuestas siempre en audio)
+    bot.command('talk', async (ctx) => {
+        if (!ctx.from) return;
+
+        const isOn = toggleTalkMode(ctx.from.id);
+        if (isOn) {
+            await ctx.reply('🎙️ Talk Mode ACTIVADO. Todas mis respuestas incluirán audio. Usa /talk de nuevo para desactivar.');
+        } else {
+            await ctx.reply('🔇 Talk Mode DESACTIVADO. Vuelvo a responder solo con texto.');
+        }
+    });
+
     // Función auxiliar para enviar texto, audio opcional, y archivos
     const sendResponseWithAudio = async (ctx: any, agentResponse: string) => {
-        // Verificar si el modelo decidió enviar un audio
-        const shouldSendAudio = agentResponse.includes('<VOICE>');
+        const userId: number = ctx.from?.id ?? 0;
+
+        // Verificar si el modelo decidió enviar un audio o si Talk Mode está activo
+        const shouldSendAudio = agentResponse.includes('<VOICE>') || isTalkModeOn(userId);
 
         // Extraer archivos si usó la etiqueta <FILE:ruta>
         const fileRegex = /<FILE:(.*?)>/g;
@@ -89,9 +106,10 @@ export const setupBot = () => {
             }
         }
 
-        // Generar y enviar audio solo si lo solicitó
-        if (shouldSendAudio && config.SPEECHIFY_API_KEY) {
+        // Generar y enviar audio
+        if (shouldSendAudio && cleanResponse.length > 0) {
             await ctx.replyWithChatAction('record_voice');
+
             const audioBuffer = await generateSpeechifyAudio(cleanResponse);
             if (audioBuffer) {
                 await ctx.replyWithVoice(new InputFile(audioBuffer, "voice.mp3"));
@@ -111,47 +129,30 @@ export const setupBot = () => {
         }
     });
 
-    // Manejar mensajes de voz
-    bot.on('message:voice', async (ctx) => {
+    // Handler compartido para procesar audio (voice o audio file)
+    const handleAudioMessage = async (ctx: any, fileId: string) => {
         try {
-            await ctx.replyWithChatAction('typing'); // Typing action works well enough for audio processing too
+            await ctx.replyWithChatAction('typing');
 
-            const fileId = ctx.message.voice.file_id;
             const file = await ctx.api.getFile(fileId);
 
             if (!file.file_path) {
-                await ctx.reply("No pude descargar el audio 😢");
+                await ctx.reply("No pude descargar el audio.");
                 return;
             }
 
-            const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
-
-            // Descargar el archivo temporalmente
-            const tempPath = path.join(process.cwd(), `${fileId}.ogg`);
-            const response = await fetch(url);
-            const buffer = await response.arrayBuffer();
-            fs.writeFileSync(tempPath, Buffer.from(buffer));
-
-            let transcribedText = "";
-            try {
-                // Transcribir con Groq Whisper
-                transcribedText = await transcribeAudio(tempPath);
-
-                // Responder opcionalmente indicando qué escuchó el bot
-                if (transcribedText?.trim()) {
-                    await ctx.reply(`🎤 _He escuchado:_ "${transcribedText}"`, { parse_mode: 'Markdown' });
-                }
-            } finally {
-                // Siempre limpiar el archivo temporal
-                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-            }
+            // Transcribir usando el módulo de voz dedicado
+            const transcribedText = await transcribeVoiceMessage(fileId, file.file_path);
 
             if (!transcribedText || transcribedText.trim() === '') {
-                await ctx.reply("No pude entender bien el audio o estaba vacío 😢");
+                await ctx.reply("No pude entender bien el audio o estaba vacío.");
                 return;
             }
 
-            // Procesar el texto transcrito de la misma forma que un mensaje de texto normal
+            // Mostrar qué escuchó el bot
+            await ctx.reply(`🎤 _He escuchado:_ "${transcribedText}"`, { parse_mode: 'Markdown' });
+
+            // Procesar el texto transcrito como un mensaje de texto normal
             const agentResponse = await processUserMessage(ctx.from.id, transcribedText);
             await sendResponseWithAudio(ctx, agentResponse);
 
@@ -159,6 +160,16 @@ export const setupBot = () => {
             console.error("[Bot Error Audio]", error);
             ctx.reply("Ups, ocurrió un error interno al procesar tu audio.");
         }
+    };
+
+    // Manejar notas de voz (grabadas con el micrófono)
+    bot.on('message:voice', async (ctx) => {
+        await handleAudioMessage(ctx, ctx.message.voice.file_id);
+    });
+
+    // Manejar archivos de audio (enviados como adjunto)
+    bot.on('message:audio', async (ctx) => {
+        await handleAudioMessage(ctx, ctx.message.audio.file_id);
     });
 
     return bot;
