@@ -4,6 +4,7 @@ import { githubTools, executeGitHubCommands } from './github.js';
 import {
     gogGmailSearchTool,
     gogGmailSendTool,
+    gogGmailGetMessageTool,
     gogCalendarListTool,
     gogCalendarCreateTool,
     gogDriveSearchTool
@@ -129,6 +130,7 @@ const toolsRegistry: Record<string, AgentTool> = {
     recall_memory: recallMemoryTool,
     gog_gmail_search: gogGmailSearchTool,
     gog_gmail_send: gogGmailSendTool,
+    gog_gmail_get_message: gogGmailGetMessageTool,
     gog_calendar_events: gogCalendarListTool,
     gog_calendar_create: gogCalendarCreateTool,
     gog_drive_search: gogDriveSearchTool,

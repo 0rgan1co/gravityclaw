@@ -16,6 +16,8 @@ const envSchema = z.object({
     OPENROUTER_CODING_MODEL: z.string().default('anthropic/claude-4.6-opus'),
     DB_PATH: z.string().default('./memory.db'),
     SPEECHIFY_API_KEY: z.string().optional(),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
 });
 
 const envParsed = envSchema.safeParse(process.env);
@@ -38,4 +40,6 @@ export const config = {
     OPENROUTER_CODING_MODEL: envParsed.data.OPENROUTER_CODING_MODEL,
     DB_PATH: envParsed.data.DB_PATH,
     SPEECHIFY_API_KEY: envParsed.data.SPEECHIFY_API_KEY,
+    GOOGLE_CLIENT_ID: envParsed.data.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: envParsed.data.GOOGLE_CLIENT_SECRET,
 };

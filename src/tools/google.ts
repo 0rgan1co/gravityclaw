@@ -41,12 +41,18 @@ export const gogGmailSearchTool: AgentTool = {
         type: "function",
         function: {
             name: "gog_gmail_search",
-            description: "Busca correos en Gmail.",
+            description: "Busca correos electrónicos en la cuenta de Gmail del usuario. Úsala para leer mensajes recientes, buscar facturas, planes o cualquier información comunicada por email.",
             parameters: {
                 type: "object",
                 properties: {
-                    query: { type: "string" },
-                    maxResults: { type: "integer" }
+                    query: { 
+                        type: "string", 
+                        description: "Consulta de búsqueda con formato de Gmail (ej. 'from:boss@company.com', 'subject:reunión', 'newer_than:1d')." 
+                    },
+                    maxResults: { 
+                        type: "integer", 
+                        description: "Número máximo de correos a recuperar (por defecto 5)." 
+                    }
                 },
                 required: ["query"]
             }
@@ -54,15 +60,16 @@ export const gogGmailSearchTool: AgentTool = {
     },
     execute: async (args: any) => {
         const query = encodeURIComponent(args.query);
-        const max = args.maxResults || 10;
+        const max = args.maxResults || 5;
         const data: any = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${max}`);
-        if (!data.messages) return "No se encontraron mensajes.";
+        if (!data.messages) return "No se encontraron mensajes que coincidan con la búsqueda.";
         const results = [];
         for (const m of data.messages) {
             const detail: any = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=minimal`);
-            results.push(`- ID: ${m.id} | ${detail.snippet}`);
+            const snippet = detail.snippet || "Sin vista previa";
+            results.push(`- [ID: ${m.id}] ${snippet}`);
         }
-        return results.join('\n');
+        return `Resultados de búsqueda en Gmail:\n${results.join('\n')}\n\nUsa gog_gmail_get_message con el ID para ver el contenido completo de un correo si es necesario.`;
     }
 };
 
@@ -71,13 +78,13 @@ export const gogGmailSendTool: AgentTool = {
         type: "function",
         function: {
             name: "gog_gmail_send",
-            description: "Envía un correo.",
+            description: "Envía un nuevo correo electrónico desde la cuenta del usuario.",
             parameters: {
                 type: "object",
                 properties: {
-                    to: { type: "string" },
-                    subject: { type: "string" },
-                    body: { type: "string" }
+                    to: { type: "string", description: "Email del destinatario." },
+                    subject: { type: "string", description: "Asunto del correo." },
+                    body: { type: "string", description: "Contenido del mensaje (puedes usar texto plano)." }
                 },
                 required: ["to", "subject", "body"]
             }
@@ -85,14 +92,51 @@ export const gogGmailSendTool: AgentTool = {
     },
     execute: async (args: any) => {
         const messageParts = [
-            `to: ${args.to}`,
-            `subject: ${args.subject}`,
+            `Content-Type: text/plain; charset="UTF-8"`,
+            `MIME-Version: 1.0`,
+            `To: ${args.to}`,
+            `Subject: ${args.subject}`,
             '',
             args.body
         ];
-        const raw = Buffer.from(messageParts.join('\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const raw = Buffer.from(messageParts.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         await googleRequest('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', 'POST', { raw });
-        return "Correo enviado.";
+        return `✅ Correo enviado con éxito a ${args.to} con el asunto "${args.subject}"`;
+    }
+};
+
+export const gogGmailGetMessageTool: AgentTool = {
+    definition: {
+        type: "function",
+        function: {
+            name: "gog_gmail_get_message",
+            description: "Obtiene el contenido completo de un correo específico por su ID.",
+            parameters: {
+                type: "object",
+                properties: {
+                    id: { type: "string", description: "El ID del mensaje de Gmail." }
+                },
+                required: ["id"]
+            }
+        }
+    },
+    execute: async (args: any) => {
+        const detail: any = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${args.id}`);
+        // Gmail API returns the body in a complex structure (payload.parts or payload.body)
+        let content = detail.snippet;
+        if (detail.payload && detail.payload.parts) {
+            const bodyPart = detail.payload.parts.find((p: any) => p.mimeType === 'text/plain') || detail.payload.parts[0];
+            if (bodyPart && bodyPart.body && bodyPart.body.data) {
+                content = Buffer.from(bodyPart.body.data, 'base64').toString('utf-8');
+            }
+        } else if (detail.payload && detail.payload.body && detail.payload.body.data) {
+            content = Buffer.from(detail.payload.body.data, 'base64').toString('utf-8');
+        }
+        
+        const from = detail.payload.headers.find((h: any) => h.name === 'From')?.value;
+        const subject = detail.payload.headers.find((h: any) => h.name === 'Subject')?.value;
+        
+        return `CONTENIDO DEL CORREO:\nDe: ${from}\nAsunto: ${subject}\n\nCuerpo:\n${content}`;
     }
 };
 
